@@ -1,0 +1,32 @@
+{
+  "manifest_version": 3,
+  "name": "Popcorn Meet",
+  "version": "2.0.0",
+  "description": "Track speaking order during Google Meet standups using DOM observation.",
+  "permissions": [
+    "storage"
+  ],
+  "action": {
+    "default_icon": "icons/icon128.png",
+    "default_title": "Toggle Popcorn Standup"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://meet.google.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["panel.css"],
+      "matches": ["https://meet.google.com/*"]
+    }
+  ],
+  "icons": {
+    "128": "icons/icon128.png"
+  }
+}
