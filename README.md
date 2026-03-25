@@ -2,6 +2,8 @@
 
 A Chrome extension that tracks speaking order during Google Meet standups — no audio capture, no permissions beyond storage.
 
+![Panel overview](assets/Popcorn1.jpg)
+
 ## How it works
 
 Google Meet visually highlights the active speaker's tile via CSS class changes. Popcorn Meet uses a MutationObserver to detect rapid class mutations on participant tiles, identifying who's speaking based on mutation frequency analysis. No microphone access needed.
@@ -10,6 +12,7 @@ Google Meet visually highlights the active speaker's tile via CSS class changes.
 
 - **Speaker detection** — automatically detects who's speaking via DOM observation
 - **Popcorn order tracking** — records who spoke, in what order, and for how long
+- **Random picker** — randomly select who goes first
 - **Turn threshold** — configurable minimum speaking time to count as a "standup update" (default 15s). Short comments/reactions don't count.
 - **Start/Pause** — manual control over when tracking begins, so pre-meeting chat doesn't pollute the data
 - **Auto-start** — optionally start tracking when N+ participants join
@@ -33,12 +36,19 @@ Google Meet visually highlights the active speaker's tile via CSS class changes.
 
 1. **Join a Meet call** — the popcorn floating button appears
 2. **Click the button** to open the tracking panel
-3. **Click "Start"** when your standup begins (or configure auto-start in settings)
-4. As people speak, they move from Pending → Speaking → Done
-5. The progress bar fills up toward the turn threshold — turns green when met
-6. **Click "Pause"** to stop tracking, **"Reset"** to start fresh
+3. **Click "Pick"** to randomly select who starts
+4. **Click "Start"** when your standup begins (or configure auto-start in settings)
+5. As people speak, they move from Pending → Speaking → Done
+6. The progress bar fills up toward the turn threshold — turns green when met
+7. **Click "Pause"** to stop tracking, **"Reset"** to start fresh
+
+| Speaking detection | Done + random pick |
+|---|---|
+| ![Speaking](assets/Popcorn3.jpg) | ![Done](assets/Popcorn4.jpg) |
 
 ## Settings (gear icon)
+
+![Settings panel](assets/Popcorn2.jpg)
 
 | Setting | Description | Default |
 |---------|-------------|---------|
@@ -55,13 +65,14 @@ popcorn-meet/
 ├── content.js       # Speaker detection + floating panel UI
 ├── panel.css        # Panel styles (loaded into Shadow DOM)
 ├── background.js    # Extension icon click handler
+├── assets/          # Screenshots
 └── icons/
     └── icon128.png
 ```
 
 ## Technical notes
 
-- **Speaker detection**: Meet applies rapidly-toggling CSS classes to the active speaker's tile (~5 changes/second for audio level visualization). The extension counts class mutations per tile in a 2-second sliding window — the tile with 4+ mutations is the speaker.
+- **Speaker detection**: Meet applies rapidly-toggling CSS classes to the active speaker's tile (~5 changes/second for audio level visualization). The extension counts class mutations per tile in a 2-second sliding window — the tile with 6+ mutations spread across 800ms+ is the speaker.
 - **Name extraction**: Participant names are pulled from the `"More options for <Name>"` aria-label pattern on buttons inside each tile.
 - **Shadow DOM**: The panel is injected into Meet's page inside a closed Shadow DOM, preventing style conflicts in both directions.
 - **No special permissions**: Only `storage` permission is required. No audio, no microphone, no tabs.
