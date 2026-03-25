@@ -8,7 +8,7 @@
   const DEBOUNCE_MS = 800;
   const STATE_SYNC_MS = 500;
   const MUTATION_WINDOW_MS = 2000;
-  const SPEAKING_THRESHOLD = 4;
+  const SPEAKING_THRESHOLD = 6;
   const AVATAR_COLORS = 8;
   const SETTINGS_KEY = "popcornSettings";
 
@@ -329,6 +329,10 @@
       const recent = timestamps.filter((t) => t > cutoff);
       classMutationTimestamps.set(pid, recent);
       if (recent.length >= SPEAKING_THRESHOLD && recent.length > maxCount) {
+        // Require mutations to span at least 800ms — filters out
+        // short bursts from mic toggle / UI state changes
+        const spread = recent[recent.length - 1] - recent[0];
+        if (spread < 800) continue;
         maxCount = recent.length;
         speakerId = pid;
       }
@@ -601,8 +605,13 @@
         </div>
         <div class="header-actions">
           <button class="btn btn-start" id="ps-start-pause">Start</button>
+          <button class="btn btn-random" id="ps-random" title="Pick a random person to start">&#x1F3B2; Pick</button>
           <button class="btn btn-toggle${currentView === "chronological" ? " active" : ""}" id="ps-toggle">${currentView === "remaining" ? "Chronological" : "Remaining"}</button>
           <button class="btn btn-reset" id="ps-reset">Reset</button>
+        </div>
+        <div class="random-pick" id="ps-random-result" style="display:none;">
+          <span class="random-pick-label">First up:</span>
+          <span class="random-pick-name" id="ps-random-name"></span>
         </div>
       </header>
       <div class="settings-panel" id="ps-settings" style="display:none;">
@@ -664,12 +673,25 @@
     const autoshowInput = shadowRoot.getElementById("ps-autoshow");
     const defaultViewInput = shadowRoot.getElementById("ps-default-view");
     const autostartInput = shadowRoot.getElementById("ps-autostart");
+    const randomBtn = shadowRoot.getElementById("ps-random");
+    const randomResult = shadowRoot.getElementById("ps-random-result");
+    const randomName = shadowRoot.getElementById("ps-random-name");
 
     // --- Events ---
 
     startPauseBtn.addEventListener("click", (e) => {
       e.stopPropagation();
       toggleTracking();
+    });
+
+    randomBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const pending = state.participants.filter((p) => p.status === "pending");
+      const pool = pending.length > 0 ? pending : state.participants;
+      if (pool.length === 0) return;
+      const picked = pool[Math.floor(Math.random() * pool.length)];
+      randomName.textContent = picked.name;
+      randomResult.style.display = "";
     });
 
     toggleBtn.addEventListener("click", (e) => {
@@ -692,6 +714,7 @@
         if (id) findOrCreateParticipant(id, extractNameFromTile(tile));
       });
       updateStartPauseBtn();
+      randomResult.style.display = "none";
       render();
     });
 

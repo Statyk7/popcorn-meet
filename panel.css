@@ -186,6 +186,44 @@
   color: var(--color-text-muted);
 }
 
+.btn-random {
+  background: var(--color-warning-light);
+  border-color: var(--color-warning);
+  color: var(--color-text-primary);
+}
+
+.btn-random:hover {
+  background: var(--color-warning);
+}
+
+/* Random pick result banner */
+.random-pick {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: var(--color-warning-light);
+  border-bottom: 1px solid var(--color-border);
+  animation: fadeSlide 0.2s ease-out;
+}
+
+@keyframes fadeSlide {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.random-pick-label {
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  flex-shrink: 0;
+}
+
+.random-pick-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
 .btn-toggle.active {
   background: var(--color-accent-light);
   border-color: var(--color-accent);
