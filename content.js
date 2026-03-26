@@ -686,8 +686,7 @@
 
     randomBtn.addEventListener("click", (e) => {
       e.stopPropagation();
-      const pending = state.participants.filter((p) => p.status === "pending");
-      const pool = pending.length > 0 ? pending : state.participants;
+      const pool = state.participants.filter((p) => p.status === "pending");
       if (pool.length === 0) return;
       const picked = pool[Math.floor(Math.random() * pool.length)];
       randomName.textContent = picked.name;
