@@ -118,6 +118,22 @@
   function findOrCreateParticipant(id, name) {
     let p = state.participants.find((x) => x.id === id);
     if (!p) {
+      // Deduplicate: if another entry already has the same name (e.g.
+      // screen-share tile gets a different participant ID but the same
+      // person's name), merge into the existing entry instead of creating
+      // a duplicate.  Keep the original ID — it was seen first and is
+      // likely the camera tile.
+      if (name && isValidName(name)) {
+        const existing = state.participants.find(
+          (x) => x.name.toLowerCase() === name.toLowerCase()
+        );
+        if (existing) {
+          // Map this new ID to the existing participant for future lookups
+          resolvedNames.set(id, existing.name);
+          return existing;
+        }
+      }
+
       p = {
         id,
         name: name || "Unknown",
@@ -273,6 +289,104 @@
   }
 
   // =====================================================================
+  // OVERFLOW PARTICIPANT DISCOVERY (people not visible in the grid)
+  // =====================================================================
+
+  /**
+   * Google Meet hides participants beyond the visible grid into an
+   * "N others" overflow tile.  These participants have no individual
+   * tile in the grid, so the MutationObserver never sees them.
+   *
+   * Meet's "People" side-panel (and sometimes the participant chips
+   * in the top bar) renders an element per participant with
+   * `data-participant-id`.  We scan ALL such elements in the page —
+   * those inside the grid are already handled by getParticipantTiles(),
+   * but any *additional* IDs we find belong to overflow participants.
+   *
+   * For overflow entries that lack a `data-participant-id` (e.g. the
+   * compact roster), we fall back to extracting names from aria-labels
+   * or visible text and create synthetic IDs so they still appear in
+   * the Pending list.
+   */
+  function discoverOverflowParticipants() {
+    const knownTileIds = new Set();
+    for (const tile of getParticipantTiles()) {
+      const id = tile.getAttribute("data-participant-id");
+      if (id) knownTileIds.add(id);
+    }
+
+    // Strategy 1: find all [data-participant-id] in the *entire* page
+    // (includes the People sidebar, top-bar chips, etc.)
+    const allPidEls = document.querySelectorAll("[data-participant-id]");
+    for (const el of allPidEls) {
+      const id = el.getAttribute("data-participant-id");
+      if (!id || knownTileIds.has(id)) continue;
+      // Try to extract a name from this element
+      const name = extractNameFromElement(el);
+      if (name) findOrCreateParticipant(id, name);
+    }
+
+    // Strategy 2: scan the People sidebar panel for list items that
+    // may not carry data-participant-id but do show a name.
+    // Meet's sidebar uses role="list" / role="listitem" patterns.
+    const listItems = document.querySelectorAll(
+      '[role="list"] [role="listitem"], [aria-label*="participant" i] [role="listitem"]'
+    );
+    const knownNames = new Set(
+      state.participants.map((p) => p.name.toLowerCase())
+    );
+    for (const item of listItems) {
+      const name = extractNameFromElement(item);
+      if (!name || !isValidName(name)) continue;
+      if (knownNames.has(name.toLowerCase())) continue;
+      // Check if this item has a real participant ID
+      const pid = item.closest("[data-participant-id]")?.getAttribute("data-participant-id")
+        || item.querySelector("[data-participant-id]")?.getAttribute("data-participant-id");
+      const id = pid || ("sidebar-" + name.toLowerCase().replace(/\s+/g, "-"));
+      findOrCreateParticipant(id, name);
+      knownNames.add(name.toLowerCase());
+    }
+  }
+
+  /**
+   * Extract a participant name from an arbitrary element (sidebar item,
+   * chip, etc.) using aria-labels and visible text heuristics.
+   */
+  function extractNameFromElement(el) {
+    // Try "More options for <Name>" pattern
+    const ariaEls = el.querySelectorAll
+      ? [el, ...el.querySelectorAll("[aria-label]")]
+      : [el];
+    for (const node of ariaEls) {
+      const label = node.getAttribute?.("aria-label");
+      if (!label) continue;
+      const match = MORE_OPTIONS_RE.exec(label);
+      if (match) {
+        const name = match[1].replace(/\s*\(.*?\)\s*$/g, "").trim();
+        if (name && isValidName(name)) return name;
+      }
+    }
+
+    // Try data-participant-id → cached name
+    const pid = el.getAttribute?.("data-participant-id");
+    if (pid && resolvedNames.has(pid)) return resolvedNames.get(pid);
+
+    // Try visible text content (for sidebar list items)
+    const textNodes = el.querySelectorAll ? el.querySelectorAll("*") : [];
+    for (const node of textNodes) {
+      if (node.children.length > 0) continue;
+      const text = node.textContent?.trim();
+      if (!text || text.length < 2 || text.length > 40) continue;
+      if (!isValidName(text)) continue;
+      // Skip if it looks like a status/role label
+      if (/^(host|organizer|presenting|you)$/i.test(text)) continue;
+      return text;
+    }
+
+    return null;
+  }
+
+  // =====================================================================
   // SPEAKER DETECTION (mutation frequency analysis)
   // =====================================================================
 
@@ -313,6 +427,9 @@
       if (!id) return;
       findOrCreateParticipant(id, extractNameFromTile(tile));
     });
+
+    // Also discover overflow participants not visible in the grid
+    discoverOverflowParticipants();
 
     // Check auto-start
     checkAutoStart();
@@ -712,6 +829,7 @@
         const id = tile.getAttribute("data-participant-id");
         if (id) findOrCreateParticipant(id, extractNameFromTile(tile));
       });
+      discoverOverflowParticipants();
       updateStartPauseBtn();
       randomResult.style.display = "none";
       render();
@@ -874,6 +992,19 @@
     const badge = document.createElement("span");
     badge.className = `badge badge-${p.status}`;
     badge.textContent = p.status === "speaking" ? "Speaking" : p.status === "done" ? "Done" : "Pending";
+    badge.title = "Click to change status";
+    badge.style.cursor = "pointer";
+    badge.addEventListener("click", (e) => {
+      e.stopPropagation();
+      // Cycle: pending → done → pending (or speaking → done → pending)
+      const next = p.status === "pending" ? "done" : "pending";
+      // If this person was the active speaker, clear that
+      if (p.status === "speaking" && state.activeSpeakerId === p.id) {
+        state.activeSpeakerId = null;
+      }
+      p.status = next;
+      render();
+    });
     div.appendChild(badge);
 
     return div;
