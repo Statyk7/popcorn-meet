@@ -333,11 +333,21 @@
    * or visible text and create synthetic IDs so they still appear in
    * the Pending list.
    */
+  // IDs of participants discovered outside the visible grid (overflow /
+  // sidebar-only).  Speaker detection cannot work for these participants
+  // because there is no tile to observe mutations on.
+  const overflowIds = new Set();
+
   function discoverOverflowParticipants() {
     const knownTileIds = new Set();
     for (const tile of getParticipantTiles()) {
       const id = tile.getAttribute("data-participant-id");
       if (id) knownTileIds.add(id);
+    }
+
+    // Remove IDs from overflowIds if they now have a visible tile
+    for (const id of overflowIds) {
+      if (knownTileIds.has(id)) overflowIds.delete(id);
     }
 
     // Strategy 1: find all [data-participant-id] in the *entire* page
@@ -348,7 +358,10 @@
       if (!id || knownTileIds.has(id)) continue;
       // Try to extract a name from this element
       const name = extractNameFromElement(el);
-      if (name) findOrCreateParticipant(id, name);
+      if (name) {
+        findOrCreateParticipant(id, name);
+        overflowIds.add(id);
+      }
     }
 
     // Strategy 2: scan the People sidebar panel for list items that
@@ -369,6 +382,7 @@
         || item.querySelector("[data-participant-id]")?.getAttribute("data-participant-id");
       const id = pid || ("sidebar-" + name.toLowerCase().replace(/\s+/g, "-"));
       findOrCreateParticipant(id, name);
+      overflowIds.add(id);
       knownNames.add(name.toLowerCase());
     }
   }
@@ -1050,7 +1064,9 @@
     emptyStateEl.style.display = "none";
 
     const frag = currentView === "chronological" ? renderChronological() : renderRemaining();
+    const banner = overflowBanner();
     participantListEl.innerHTML = "";
+    if (banner) participantListEl.appendChild(banner);
     participantListEl.appendChild(frag);
   }
 
@@ -1105,6 +1121,33 @@
     const el = document.createElement("div");
     el.className = "section-label";
     el.textContent = text;
+    return el;
+  }
+
+  function overflowBanner() {
+    // Count overflow participants that are still in the list
+    const ids = new Set(state.participants.map((p) => p.id));
+    let count = 0;
+    for (const id of overflowIds) {
+      if (ids.has(id)) count++;
+    }
+    if (count === 0) return null;
+
+    const el = document.createElement("div");
+    el.className = "overflow-banner";
+
+    const text = document.createElement("span");
+    text.textContent =
+      count === 1
+        ? "1 participant is not visible in the grid and may not be auto-detected. "
+        : `${count} participants are not visible in the grid and may not be auto-detected. `;
+    el.appendChild(text);
+
+    const hint = document.createElement("span");
+    hint.className = "overflow-hint";
+    hint.textContent = "Open Meet's People panel to discover everyone, or click a status to update it manually.";
+    el.appendChild(hint);
+
     return el;
   }
 
