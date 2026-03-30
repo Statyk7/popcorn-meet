@@ -104,6 +104,9 @@
     "presentation", "screen", "you", "pin", "mute", "unmute",
     "more options", "more actions", "turn off", "turn on",
     "backgrounds and effects",
+    // RSVP / invite statuses shown in Meet's participant list
+    "accepted", "no response", "declined", "tentative",
+    "invited", "not responded", "maybe",
   ]);
 
   function isValidName(name) {
@@ -146,6 +149,28 @@
       state.participants.push(p);
     }
     if (name && isValidName(name) && (p.name !== name || p.name === "Unknown")) {
+      // Before updating name, check if another participant already has this
+      // name — if so, merge into that entry (handles the case where two IDs
+      // were created with "Unknown" and later both resolve to the same name).
+      const existing = state.participants.find(
+        (x) => x !== p && x.name.toLowerCase() === name.toLowerCase()
+      );
+      if (existing) {
+        // Merge: keep the one with more speaking data
+        existing.totalDuration += p.totalDuration;
+        existing.speakCount += p.speakCount;
+        if (p.firstSpoke && (!existing.firstSpoke || p.firstSpoke < existing.firstSpoke)) {
+          existing.firstSpoke = p.firstSpoke;
+        }
+        if (p.status === "speaking" || p.status === "done") {
+          existing.status = p.status;
+        }
+        // Remove the duplicate
+        const idx = state.participants.indexOf(p);
+        if (idx !== -1) state.participants.splice(idx, 1);
+        resolvedNames.set(id, existing.name);
+        return existing;
+      }
       p.name = name;
       p.initials = getInitials(name);
     }
@@ -378,8 +403,8 @@
       const text = node.textContent?.trim();
       if (!text || text.length < 2 || text.length > 40) continue;
       if (!isValidName(text)) continue;
-      // Skip if it looks like a status/role label
-      if (/^(host|organizer|presenting|you)$/i.test(text)) continue;
+      // Skip if it looks like a status/role label or RSVP status
+      if (/^(host|organizer|presenting|you|accepted|declined|no response|tentative|invited|maybe)$/i.test(text)) continue;
       return text;
     }
 
